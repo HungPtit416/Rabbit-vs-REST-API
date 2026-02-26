@@ -97,11 +97,16 @@ curl -X POST http://localhost:5000/order/rabbitmq `
 
 ### 4.2. Tạo Test Plan
 
-#### **Test 1: REST API (Endpoint chậm)**
+**LƯU Ý:** Tạo **2 Thread Groups** trong **CÙNG 1 Test Plan** để so sánh dễ dàng.
 
-**1. Tạo Thread Group:**
+---
+
+#### **THREAD GROUP 1: REST API (Endpoint chậm)**
+
+**1. Tạo Thread Group đầu tiên:**
 ```
 - Right click Test Plan → Add → Threads → Thread Group
+- Đổi tên: "Test 1: REST API (Slow)"
 - Number of Threads: 1000
 - Ramp-up period: 10 (giây)
 - Loop Count: 1
@@ -109,7 +114,8 @@ curl -X POST http://localhost:5000/order/rabbitmq `
 
 **2. Thêm HTTP Request:**
 ```
-- Right click Thread Group → Add → Sampler → HTTP Request
+- Right click "Test 1: REST API (Slow)" → Add → Sampler → HTTP Request
+- Đổi tên: "POST /order/rest"
 
 Cấu hình:
 - Server Name: localhost
@@ -125,29 +131,91 @@ Cấu hình:
 
 **3. Thêm HTTP Header:**
 ```
-- Right click Thread Group → Add → Config Element → HTTP Header Manager
+- Right click "Test 1: REST API (Slow)" → Add → Config Element → HTTP Header Manager
 - Add:
   Name: Content-Type
   Value: application/json
 ```
 
-**4. Thêm Listeners:**
+---
+
+#### **THREAD GROUP 2: RabbitMQ (Endpoint nhanh)**
+
+**4. Tạo Thread Group thứ hai (trong cùng Test Plan):**
 ```
-- Right click Thread Group → Add → Listener → Summary Report
-- Right click Thread Group → Add → Listener → View Results Tree
-- Right click Thread Group → Add → Listener → Graph Results
+- Right click Test Plan → Add → Threads → Thread Group
+- Đổi tên: "Test 2: RabbitMQ (Fast)"
+- Number of Threads: 1000
+- Ramp-up period: 10 (giây)
+- Loop Count: 1
 ```
 
-#### **Test 2: RabbitMQ (Endpoint nhanh)**
+**5. Thêm HTTP Request:**
+```
+- Right click "Test 2: RabbitMQ (Fast)" → Add → Sampler → HTTP Request
+- Đổi tên: "POST /order/rabbitmq"
 
-Làm tương tự Test 1 nhưng:
-- **Path:** `/order/rabbitmq`
+Cấu hình:
+- Server Name: localhost
+- Port: 5000
+- Method: POST
+- Path: /order/rabbitmq
+- Body Data:
+  {
+    "order_id": "ORD${__Random(1,10000)}",
+    "email": "user${__Random(1,1000)}@example.com"
+  }
+```
+
+**6. Thêm HTTP Header:**
+```
+- Right click "Test 2: RabbitMQ (Fast)" → Add → Config Element → HTTP Header Manager
+- Add:
+  Name: Content-Type
+  Value: application/json
+```
+
+---
+
+#### **LISTENERS (cho cả 2 Thread Groups)**
+
+**7. Thêm Listeners vào Test Plan (không phải vào Thread Group):**
+```
+- Right click Test Plan → Add → Listener → Summary Report
+- Right click Test Plan → Add → Listener → View Results Tree
+- Right click Test Plan → Add → Listener → Graph Results
+```
+
+→ Listeners ở level Test Plan sẽ thu thập kết quả từ **cả 2 Thread Groups**
 
 ### 4.3. Chạy Test
 
+**Cấu trúc JMeter sau khi tạo xong:**
+```
+Test Plan
+├── Thread Group 1: REST API (Slow)
+│   ├── HTTP Request: POST /order/rest
+│   └── HTTP Header Manager
+├── Thread Group 2: RabbitMQ (Fast)
+│   ├── HTTP Request: POST /order/rabbitmq
+│   └── HTTP Header Manager
+├── Summary Report (Listener)
+├── View Results Tree (Listener)
+└── Graph Results (Listener)
+```
+
+**Chạy test:**
 1. **Save Test Plan:** File → Save (lưu thành `test_load.jmx`)
-2. **Run Test:** Click nút **Start** (▶️) hoặc Ctrl+R
-3. **Quan sát kết quả** trong Summary Report và Graph Results
+2. **Chọn test nào chạy:**
+   - Muốn chạy cả 2: Bỏ check hết
+   - Muốn chỉ chạy REST: Right click "Test 2" → Disable
+   - Muốn chỉ chạy RabbitMQ: Right click "Test 1" → Disable
+3. **Run Test:** Click nút **Start** (▶️) hoặc Ctrl+R
+4. **Quan sát kết quả** trong Summary Report và Graph Results
+
+**Tips:**
+- Chạy từng Test riêng trước để so sánh rõ
+- Summary Report sẽ hiển thị kết quả theo Label (Thread Group name)
 
 ### 4.4. Kết quả mong đợi
 
