@@ -1,19 +1,19 @@
-# 🚀 Demo So Sánh REST API vs RabbitMQ
+# Demo So Sánh REST API vs RabbitMQ
 
 So sánh hiệu suất giữa REST API (đồng bộ) và RabbitMQ (bất đồng bộ) với **load cao (1000 users đồng thời)**.
 
 ---
 
-## 📖 TÀI LIỆU
+## TÀI LIỆU
 
 | File | Mô tả |
 |------|-------|
-| **[HUONG_DAN_CHAY.md](HUONG_DAN_CHAY.md)** | 📖 Hướng dẫn chi tiết chạy + JMeter |
-| **[KIEN_TRUC.md](KIEN_TRUC.md)** | 🏗️ Kiến trúc và flow |
+| **[HUONG_DAN_CHAY.md](HUONG_DAN_CHAY.md)** | Hướng dẫn chi tiết chạy + JMeter |
+| **[KIEN_TRUC.md](KIEN_TRUC.md)** | Kiến trúc và flow |
 
 ---
 
-## ⚡ CHẠY NHANH
+## CHẠY NHANH
 
 ### 1. Cài đặt
 ```powershell
@@ -46,18 +46,18 @@ curl -X POST http://localhost:5000/order/rabbitmq -H "Content-Type: application/
 
 ---
 
-## 📊 Kết quả
+## Kết quả
 
 | Phương thức | 1 user | 1000 users | Winner |
 |-------------|--------|------------|--------|
-| **REST API** | ~2.5s | Timeout | 🐢 |
-| **RabbitMQ** | ~0.05s | Stable | ⚡ |
+| **REST API** | ~2.5s | Timeout | Chậm |
+| **RabbitMQ** | ~0.05s | Stable | Nhanh |
 
 **Kết luận:** RabbitMQ nhanh hơn **50 lần** và stable với load cao!
 
 ---
 
-## 🎯 Mục đích
+## Mục đích
 
 Hiểu sự khác biệt giữa:
 - **Đồng bộ** (REST) - Blocking, chậm
@@ -71,7 +71,7 @@ Hiểu sự khác biệt giữa:
 
 **Chi tiết:** [HUONG_DAN_CHAY.md](HUONG_DAN_CHAY.md)
 
-## 🔧 Cài đặt
+## Cài đặt
 
 ### Bước 1: Cài đặt Python dependencies
 
@@ -97,7 +97,7 @@ Truy cập RabbitMQ Management: http://localhost:15672
 2. Cài đặt Erlang: https://www.erlang.org/downloads
 3. Cài đặt RabbitMQ và chạy service
 
-## 🚀 Chạy Demo
+## Chạy Demo
 
 ### Bước 1: Mở 3 cửa sổ Terminal/PowerShell
 
@@ -125,7 +125,7 @@ python email_service/consumer.py
 
 Kết quả: Consumer lắng nghe queue `email_queue`
 
-## 📝 Test Demo
+## Test Demo
 
 ### Bước 2: Mở Terminal thứ 4 để test
 
@@ -138,7 +138,7 @@ curl -X POST http://localhost:5000/order/rest `
 ```
 
 **Kết quả:**
-- ⏱️ Phải đợi ~2.5 giây
+- Phải đợi ~2.5 giây
 - Order Service chờ Email Service xử lý xong mới trả về
 - Response sẽ có `elapsed_time` khoảng 2.5-3s
 
@@ -151,7 +151,7 @@ curl -X POST http://localhost:5000/order/rabbitmq `
 ```
 
 **Kết quả:**
-- ⚡ Trả về ngay lập tức (~0.01-0.05 giây)
+- Trả về ngay lập tức (~0.01-0.05 giây)
 - Message được đẩy vào queue
 - Email Consumer xử lý phía sau
 - Response có `elapsed_time` rất thấp
@@ -179,14 +179,14 @@ print(f"RabbitMQ Response: {response.json()}")
 print(f"Time taken: {time.time() - start:.2f}s")
 ```
 
-## 📊 So sánh kết quả
+## So sánh kết quả
 
 | Phương thức | Thời gian phản hồi | Xử lý email | Load cao |
 |-------------|-------------------|-------------|----------|
-| **REST API** | ~2.5-3s (chậm) | Đồng bộ, phải đợi | ❌ Dễ bị nghẽn |
-| **RabbitMQ** | ~0.01-0.05s (nhanh) | Bất đồng bộ, không đợi | ✅ Ổn định |
+| **REST API** | ~2.5-3s (chậm) | Đồng bộ, phải đợi | Dễ bị nghẽ n |
+| **RabbitMQ** | ~0.01-0.05s (nhanh) | Bất đồng bộ, không đợi | Ổn định |
 
-## 🎯 Kết luận
+## Kết luận
 
 - **REST API**: Đơn giản nhưng chậm, client phải đợi toàn bộ quá trình
 - **RabbitMQ**: Nhanh hơn, client không phải đợi, xử lý phía sau
@@ -195,7 +195,7 @@ print(f"Time taken: {time.time() - start:.2f}s")
   - Cần scale và load balancing
   - Tách biệt các service
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Lỗi: Connection refused to RabbitMQ
 ```
@@ -218,7 +218,7 @@ Kiểm tra RabbitMQ đã chạy chưa:
 3. Restart consumer
 ```
 
-## 📁 Cấu trúc Project
+## Cấu trúc Project
 
 ```
 HDV - py/
@@ -235,20 +235,20 @@ HDV - py/
 └── COMMANDS.ps1           # Tất cả lệnh cần dùng
 ```
 
-### 🎯 Kiến trúc Email Service
+### Kiến trúc Email Service
 
 ```
 ┌─────────────────────────────────────────────┐
 │         EMAIL SERVICE                        │
 ├─────────────────────────────────────────────┤
 │                                              │
-│  📨 REST API          📨 RabbitMQ Consumer  │
+│  REST API          RabbitMQ Consumer  │
 │  (app.py)             (consumer.py)          │
 │      │                      │                │
 │      └──────────┬───────────┘                │
 │                 │                            │
 │                 ▼                            │
-│      ⭐ process_email()                      │
+│      process_email()                      │
 │      (email_processor.py)                    │
 │                 │                            │
 │                 ├─ Delay 2.5s               │
@@ -259,7 +259,7 @@ HDV - py/
 
 **Điểm quan trọng:** Cả REST API và RabbitMQ Consumer đều gọi chung **1 hàm `process_email()`** → đảm bảo logic xử lý giống hệt nhau!
 
-## 📞 Support
+## Support
 
 Nếu có lỗi, kiểm tra:
 1. RabbitMQ đã chạy chưa?

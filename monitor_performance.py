@@ -25,10 +25,10 @@ def format_bytes(bytes):
 def monitor_performance(interval=2):
     """Monitor CPU, Memory real-time"""
     print("=" * 80)
-    print("🔍 PERFORMANCE MONITOR - Tracking Python processes")
+    print("PERFORMANCE MONITOR - Tracking Python processes")
     print("=" * 80)
     print("Nhấn Ctrl+C để dừng\n")
-    print("💡 Chạy JMeter test để thấy performance thay đổi...\n")
+    print("Chạy JMeter test để thấy performance thay đổi...\n")
     
     try:
         sample_count = 0
@@ -40,7 +40,7 @@ def monitor_performance(interval=2):
             if sample_count % 10 == 1:
                 os.system('cls' if os.name == 'nt' else 'clear')
                 print("=" * 80)
-                print(f"🔍 PERFORMANCE MONITOR - Sample #{sample_count}")
+                print(f"PERFORMANCE MONITOR - Sample #{sample_count}")
                 print("=" * 80)
             
             # Get system info
@@ -48,14 +48,14 @@ def monitor_performance(interval=2):
             memory = psutil.virtual_memory()
             
             print(f"\n[{timestamp}] System Overview:")
-            print(f"  💻 Total CPU: {cpu_percent:.1f}%")
-            print(f"  🧠 Total Memory: {memory.percent:.1f}% ({format_bytes(memory.used)} / {format_bytes(memory.total)})")
+            print(f"  Total CPU: {cpu_percent:.1f}%")
+            print(f"  Total Memory: {memory.percent:.1f}% ({format_bytes(memory.used)} / {format_bytes(memory.total)})")
             
             # Get Python processes
             python_procs = get_python_processes()
             
             if python_procs:
-                print(f"\n  🐍 Python Processes ({len(python_procs)}):")
+                print(f"\n  Python Processes ({len(python_procs)}):")
                 for proc in python_procs:
                     try:
                         cpu = proc.cpu_percent(interval=0.1)
@@ -67,11 +67,11 @@ def monitor_performance(interval=2):
             # Warning indicators
             warnings = []
             if cpu_percent > 70:
-                warnings.append(f"⚠️  HIGH CPU: {cpu_percent:.1f}%")
+                warnings.append(f"HIGH CPU: {cpu_percent:.1f}%")
             if cpu_percent > 90:
-                warnings.append(f"🚨 CRITICAL CPU: {cpu_percent:.1f}%")
+                warnings.append(f"CRITICAL CPU: {cpu_percent:.1f}%")
             if memory.percent > 80:
-                warnings.append(f"⚠️  HIGH MEMORY: {memory.percent:.1f}%")
+                warnings.append(f"HIGH MEMORY: {memory.percent:.1f}%")
             
             if warnings:
                 print("\n  Warnings:")
@@ -83,16 +83,16 @@ def monitor_performance(interval=2):
             time.sleep(interval)
             
     except KeyboardInterrupt:
-        print("\n\n👋 Stopped monitoring.")
+        print("\n\nStopped monitoring.")
 
 if __name__ == '__main__':
-    print("\n🚀 Starting Performance Monitor...")
+    print("\nStarting Performance Monitor...")
     print("=" * 80)
-    print("📊 This will track:")
+    print("This will track:")
     print("   - System CPU usage")
     print("   - Memory usage")
     print("   - Python processes performance")
-    print("\n💡 Guide:")
+    print("\nGuide:")
     print("   1. Let this run")
     print("   2. Open another terminal and run JMeter test")
     print("   3. Watch the numbers here:")
@@ -104,4 +104,4 @@ if __name__ == '__main__':
     try:
         monitor_performance(interval=2)
     except Exception as e:
-        print(f"\n❌ Error: {e}")
+        print(f"\nError: {e}")

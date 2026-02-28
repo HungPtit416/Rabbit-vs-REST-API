@@ -1,6 +1,6 @@
-# 🏗️ KIẾN TRÚC - SO SÁNH REST API VS RABBITMQ
+# KIẾN TRÚC - SO SÁNH REST API VS RABBITMQ
 
-## 📊 Tổng quan
+## Tổng quan
 
 Demo so sánh 2 cách xử lý request khi có **load cao (1000 users đồng thời)**:
 - **REST API** (đồng bộ) - Blocking, chậm, dễ timeout
@@ -8,39 +8,39 @@ Demo so sánh 2 cách xử lý request khi có **load cao (1000 users đồng th
 
 ---
 
-## 🔄 LUỒNG 1: REST API (Đồng bộ)
+## LUỒNG 1: REST API (Đồng bộ)
 
 ```
 Client → Order Service → Email Service (xử lý 2.5s) → Response
-         (đợi 2.5s)                                    (chậm 🐢)
+         (đợi 2.5s)                                    (chậm)
 ```
 
 ### Đặc điểm:
-- ⏱️ Response time: **~2.5s**
-- 🔗 Blocking: Phải đợi xử lý xong
-- ⚠️ Vấn đề: 1000 users đồng thời → timeout, lỗi
-- ✅ Ưu điểm: Đơn giản, biết ngay kết quả
+- Response time: **~2.5s**
+- Blocking: Phải đợi xử lý xong
+- Vấn đề: 1000 users đồng thời → timeout, lỗi
+- Ưu điểm: Đơn giản, biết ngay kết quả
 
 ---
 
-## ⚡ LUỒNG 2: RabbitMQ (Bất đồng bộ)
+## LUỒNG 2: RabbitMQ (Bất đồng bộ)
 
 ```
 Client → Order Service → RabbitMQ Queue → Response ngay
-         (push queue)         ↓            (nhanh ⚡)
+         (push queue)         ↓            (nhanh)
                          Email Consumer
                          (xử lý 2.5s sau)
 ```
 
 ### Đặc điểm:
-- ⏱️ Response time: **~0.05s** (nhanh gấp 50 lần!)
-- 🔗 Non-blocking: Không đợi, trả về ngay
-- ✅ Ưu điểm: Nhanh, stable với load cao
-- ⚠️ Nhược điểm: Không biết ngay kết quả
+- Response time: **~0.05s** (nhanh gấp 50 lần!)
+- Non-blocking: Không đợi, trả về ngay
+- Ưu điểm: Nhanh, stable với load cao
+- Nhược điểm: Không biết ngay kết quả
 
 ---
 
-## 🎯 EMAIL SERVICE - Kiến trúc
+## EMAIL SERVICE - Kiến trúc
 
 ```
 ┌─────────────────────────────────────────┐
@@ -60,7 +60,7 @@ Client → Order Service → RabbitMQ Queue → Response ngay
 
 ---
 
-## 🧪 TEST VỚI JMETER (1000 USERS)
+## TEST VỚI JMETER (1000 USERS)
 
 ### Endpoint 1: REST API
 ```
@@ -95,7 +95,7 @@ Content-Type: application/json
 
 ---
 
-## 📁 Cấu trúc Project
+## Cấu trúc Project
 
 ```
 HDV - py/
@@ -116,7 +116,7 @@ HDV - py/
 
 ---
 
-## 💡 Kết luận
+## Kết luận
 
 ### Load thấp (1-10 users):
 - REST và RabbitMQ đều OK
@@ -138,7 +138,7 @@ HDV - py/
 
 ---
 
-## 📊 Chi tiết flow
+## Chi tiết flow
 
 ### REST API Flow:
 ```

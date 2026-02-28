@@ -24,7 +24,7 @@ def process_email(order_id, email, message, source="UNKNOWN"):
     # Mô phỏng xử lý nặng: gửi email, kết nối SMTP, etc.
     time.sleep(2.5)
     
-    print(f"[EMAIL {source}] ✅ Đã gửi email thành công!")
+    print(f"[EMAIL {source}] Đã gửi email thành công!")
     print("-" * 60)
     
     return {

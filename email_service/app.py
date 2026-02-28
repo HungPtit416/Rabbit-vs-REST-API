@@ -38,8 +38,8 @@ def home():
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("📧 EMAIL SERVICE (REST API) đang chạy trên http://localhost:5001")
+    print("EMAIL SERVICE (REST API) đang chạy trên http://localhost:5001")
     print("=" * 60)
-    print("⚡ Multi-threading: ENABLED (xử lý đồng thời nhiều requests)")
+    print("Multi-threading: ENABLED (xử lý đồng thời nhiều requests)")
     print("=" * 60)
     app.run(host='0.0.0.0', port=5001, debug=True, threaded=True)

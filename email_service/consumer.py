@@ -40,7 +40,7 @@ def main():
     Consumer RabbitMQ - lắng nghe queue và xử lý message
     """
     print("=" * 60)
-    print("📧 EMAIL CONSUMER đang khởi động...")
+    print("EMAIL CONSUMER đang khởi động...")
     print("=" * 60)
     
     try:
@@ -63,23 +63,23 @@ def main():
             on_message_callback=callback
         )
         
-        print(f"✅ Đang lắng nghe queue: {RABBITMQ_QUEUE}")
-        print("⏳ Chờ message... (Ctrl+C để thoát)")
+        print(f"Đang lắng nghe queue: {RABBITMQ_QUEUE}")
+        print("Chờ message... (Ctrl+C để thoát)")
         print("=" * 60)
         
         # Bắt đầu consume
         channel.start_consuming()
         
     except KeyboardInterrupt:
-        print("\n👋 Đang dừng consumer...")
+        print("\nDừng consumer...")
     except pika.exceptions.AMQPConnectionError as e:
-        print(f"❌ Lỗi kết nối RabbitMQ: {e}")
-        print("\n💡 Giải pháp:")
+        print(f"Lỗi kết nối RabbitMQ: {e}")
+        print("\nGiải pháp:")
         print("   1. Kiểm tra RabbitMQ đã chạy: docker ps | Select-String rabbitmq")
         print("   2. Start RabbitMQ: docker start rabbitmq")
         print("   3. Hoặc chạy container mới: docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management")
     except Exception as e:
-        print(f"❌ Lỗi: {e}")
+        print(f"Lỗi: {e}")
         import traceback
         traceback.print_exc()
 

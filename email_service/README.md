@@ -2,16 +2,16 @@
 
 Service xử lý gửi email với 2 cách nhận request:
 
-## 📂 Cấu trúc
+## Cấu trúc
 
 ```
 email_service/
-├── email_processor.py   ⭐ Hàm xử lý chung
-├── app.py              📨 REST API endpoint
-└── consumer.py         📨 RabbitMQ Consumer
+├── email_processor.py   Hàm xử lý chung
+├── app.py              REST API endpoint
+└── consumer.py         RabbitMQ Consumer
 ```
 
-## 🎯 Kiến trúc
+## Kiến trúc
 
 ```
 ┌─────────────────────────────────────┐

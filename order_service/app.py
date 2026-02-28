@@ -5,6 +5,7 @@ import json
 import time
 from pika.exceptions import AMQPConnectionError
 import threading
+from queue import Queue
 
 app = Flask(__name__)
 
@@ -13,33 +14,59 @@ EMAIL_SERVICE_URL = "http://localhost:5001/send-email"
 RABBITMQ_HOST = "localhost"
 RABBITMQ_QUEUE = "email_queue"
 
-# Thread-local storage cho RabbitMQ connections (connection pooling)
-thread_local = threading.local()
+# Connection Pool cho RabbitMQ (để xử lý high concurrency)
+MAX_POOL_SIZE = 100  # 100 connections sẵn sàng
+connection_pool = Queue(maxsize=MAX_POOL_SIZE)
+pool_lock = threading.Lock()
 
-def get_rabbitmq_connection():
-    """
-    Tạo connection pool cho mỗi thread
-    Tránh tình trạng tạo/đóng connection liên tục
-    """
-    if not hasattr(thread_local, 'connection') or thread_local.connection is None or thread_local.connection.is_closed:
+def init_connection_pool():
+    """Khởi tạo connection pool khi start app"""
+    print(f"[INIT] Đang tạo {MAX_POOL_SIZE} RabbitMQ connections...")
+    for i in range(MAX_POOL_SIZE):
         try:
-            thread_local.connection = pika.BlockingConnection(
+            conn = pika.BlockingConnection(
                 pika.ConnectionParameters(
                     host=RABBITMQ_HOST,
                     heartbeat=600,
                     blocked_connection_timeout=300,
-                    connection_attempts=3,
-                    retry_delay=1
                 )
             )
-            thread_local.channel = thread_local.connection.channel()
-            thread_local.channel.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
-        except AMQPConnectionError as e:
-            print(f"[ERROR] Không thể kết nối RabbitMQ: {e}")
-            thread_local.connection = None
-            thread_local.channel = None
-    
-    return thread_local.connection, thread_local.channel
+            channel = conn.channel()
+            channel.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
+            connection_pool.put((conn, channel))
+            if (i + 1) % 20 == 0:
+                print(f"[INIT] Đã tạo {i + 1}/{MAX_POOL_SIZE} connections...")
+        except Exception as e:
+            print(f"[ERROR] Không thể tạo connection {i}: {e}")
+            break
+    print(f"[INIT] Connection pool sẵn sàng với {connection_pool.qsize()} connections")
+
+def get_rabbitmq_connection():
+    """Lấy connection từ pool"""
+    try:
+        conn, channel = connection_pool.get(timeout=2)
+        # Kiểm tra connection còn sống không
+        if conn.is_closed:
+            # Tạo lại connection mới
+            conn = pika.BlockingConnection(
+                pika.ConnectionParameters(host=RABBITMQ_HOST, heartbeat=600)
+            )
+            channel = conn.channel()
+            channel.queue_declare(queue=RABBITMQ_QUEUE, durable=True)
+        return conn, channel
+    except Exception as e:
+        print(f"[ERROR] Không lấy được connection từ pool: {e}")
+        return None, None
+
+def return_connection(conn, channel):
+    """Trả connection về pool"""
+    try:
+        if conn and not conn.is_closed:
+            connection_pool.put((conn, channel), timeout=1)
+    except:
+        # Pool đầy, đóng connection
+        if conn and not conn.is_closed:
+            conn.close()
 
 
 @app.route('/order/rest', methods=['POST'])
@@ -65,7 +92,7 @@ def create_order_rest():
                 'email': customer_email,
                 'message': f'Đơn hàng {order_id} đã được tạo thành công!'
             },
-            timeout=10
+            timeout=5  # Giảm từ 10s xuống 5s để dễ timeout khi load cao
         )
         
         elapsed_time = time.time() - start_time
@@ -76,7 +103,7 @@ def create_order_rest():
             'order_id': order_id,
             'email_sent': response.json(),
             'elapsed_time': f'{elapsed_time:.2f}s',
-            'note': '⚠️ Phải đợi Email Service xử lý xong mới trả về'
+            'note': 'Phải đợi Email Service xử lý xong mới trả về'
         }), 200
         
     except Exception as e:
@@ -124,7 +151,8 @@ def create_order_rabbitmq():
             )
         )
         
-        # KHÔNG đóng connection (để reuse cho request tiếp theo)
+        # Trả connection về pool để reuse
+        return_connection(connection, channel)
         
         elapsed_time = time.time() - start_time
         
@@ -136,11 +164,14 @@ def create_order_rabbitmq():
             'order_id': order_id,
             'message': 'Đơn hàng đã được tạo, email sẽ được gửi trong giây lát',
             'elapsed_time': f'{elapsed_time:.2f}s',
-            'note': '✅ Trả về ngay lập tức, không cần đợi Email Service'
+            'note': 'Trả về ngay lập tức, không cần đợi Email Service'
         }), 200
         
     except Exception as e:
         elapsed_time = time.time() - start_time
+        # Cố gắng trả connection về pool ngay cả khi có lỗi
+        if 'connection' in locals() and connection:
+            return_connection(connection, channel)
         return jsonify({
             'status': 'error',
             'method': 'RabbitMQ (Bất đồng bộ)',
@@ -166,12 +197,20 @@ def home():
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("🚀 ORDER SERVICE đang chạy trên http://localhost:5000")
+    print("ORDER SERVICE đang chạy trên http://localhost:5000")
     print("=" * 60)
-    print("📌 Endpoints:")
+    print("Endpoints:")
     print("   - POST /order/rest      → REST API (đồng bộ, chậm)")
     print("   - POST /order/rabbitmq  → RabbitMQ (bất đồng bộ, nhanh)")
     print("=" * 60)
-    print("⚡ Multi-threading: ENABLED (xử lý đồng thời nhiều requests)")
+    print("Multi-threading: ENABLED (xử lý đồng thời nhiều requests)")
+    print("RabbitMQ Connection Pool: INITIALIZING...")
     print("=" * 60)
-    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
+    
+    # Khởi tạo connection pool trước khi start server
+    init_connection_pool()
+    
+    print("=" * 60)
+    print("Server sẵn sàng!")
+    print("=" * 60)
+    app.run(host='0.0.0.0', port=5000, debug=False, threaded=True, use_reloader=False)
