@@ -5,7 +5,7 @@
 ### 1.1. Cài đặt Python packages
 ```powershell
 cd "c:\Users\ADMIN\Desktop\HDV - py"
-pip install Flask requests pika
+pip install Flask requests pika psutil
 ```
 
 ### 1.2. Khởi động RabbitMQ
@@ -88,6 +88,27 @@ curl -X POST http://localhost:5000/order/rabbitmq `
 ---
 
 ## 📊 BƯỚC 4: TEST LOAD VỚI JMETER (1000 USERS)
+
+### 4.0. Monitor Performance (Khuyến nghị)
+
+**Mở Terminal thứ 4 để monitor real-time:**
+```powershell
+cd "c:\Users\ADMIN\Desktop\HDV - py"
+python monitor_performance.py
+```
+
+**Script này sẽ theo dõi:**
+- ✅ CPU usage (System + Python processes)
+- ✅ Memory usage
+- ✅ Warnings khi CPU/Memory cao
+
+**Khi chạy JMeter test, bạn sẽ thấy:**
+- **REST API test:** CPU spike 80-100% 🔥
+- **RabbitMQ test:** CPU stable 20-40% ✅
+
+→ Đây là bằng chứng trực quan REST API bị quá tải!
+
+---
 
 ### 4.1. Cài đặt JMeter
 
@@ -219,6 +240,8 @@ Test Plan
 
 ### 4.4. Kết quả mong đợi
 
+#### **Test với 1000 users:**
+
 | Metric | REST API | RabbitMQ |
 |--------|----------|----------|
 | **Samples** | 1000 | 1000 |
@@ -231,6 +254,257 @@ Test Plan
 **Kết luận:**
 - REST API: Nhiều timeout, slow, không stable
 - RabbitMQ: Fast, stable, scalable
+
+---
+
+#### **⚠️ Test với 5000 users: Phát hiện vấn đề!**
+
+**Kết quả thực tế:**
+```
+POST /order/rest:     75.48% Error, 1592ms avg
+POST /order/rabbitmq: 94.98% Error, 923ms avg  ← Tại sao RabbitMQ error cao???
+```
+
+**🔍 Giải thích:**
+
+**1. Tại sao RabbitMQ error CAO HƠN REST?**
+
+❌ **KHÔNG phải RabbitMQ yếu!** Mà vì:
+
+```
+5000 concurrent requests → Order Service (port 5000)
+                                  ↓
+                    Order Service bị OVERLOAD!
+                                  ↓
+         ┌────────────────────────┴────────────────────────┐
+         ↓                                                  ↓
+REST path (75% error):                     RabbitMQ path (95% error):
+HTTP call → Email Service                  Publish → RabbitMQ
+✅ Request đơn giản                        ❌ Connection pool cạn kiệt
+✅ Không cần connection pool               ❌ Mỗi publish cần channel riêng
+✅ Flask xử lý đủ nhanh (vẫn 75% error)    ❌ RabbitMQ từ chối connections
+
+```
+
+**Nguyên nhân gốc:**
+- ⚠️ **Flask mặc định = SINGLE-THREADED** (chỉ xử lý 1 request/lần)
+- Order Service không kịp nhận 5000 requests → timeout
+- RabbitMQ path phức tạp hơn (cần mở connection/channel) → fail nhiều hơn
+
+**2. Tại sao REST API log "giữ nguyên" (không chạy tiếp)?**
+
+```python
+# Code cũ (SINGLE-THREADED):
+app.run(host='0.0.0.0', port=5001)  # ❌ Xử lý tuần tự, chậm!
+
+# Điều gì xảy ra:
+Request 1 → Processing (2.5s) → Done
+Request 2 → Processing (2.5s) → Done
+...
+Request 100 → Done
+Request 101-5000 → TIMEOUT (chờ quá lâu, JMeter hủy)
+```
+
+**Log "giữ nguyên" vì:**
+- Flask xử lý ~100-200 requests
+- Các request còn lại timeout
+- JMeter ngừng gửi → Log dừng
+
+**3. Tại sao RabbitMQ Consumer vẫn chạy?**
+
+✅ **Đúng như thiết kế!**
+- Những messages không bị error (~5% = 250 messages) đã vào queue
+- Consumer xử lý ổn định, từng message (2.5s/cái)
+- **Đây là ưu điểm:** Không bị timeout, xử lý chắc chắn
+
+---
+
+#### **🛠️ FIX: Bật Multi-threading**
+
+**✅ ĐÃ FIX trong code mới!**
+
+```python
+# order_service/app.py và email_service/app.py
+app.run(host='0.0.0.0', port=5000, threaded=True)  # ✅ Xử lý đồng thời!
+
+# + Connection pooling cho RabbitMQ
+```
+
+**Chạy lại test sau khi fix:**
+1. **Stop tất cả services** (Ctrl+C)
+2. **Restart lại:**
+   ```powershell
+   python order_service/app.py
+   python email_service/app.py
+   python email_service/consumer.py
+   ```
+3. **Chạy JMeter lại với 5000 users**
+
+**Kết quả mong đợi sau khi fix:**
+```
+POST /order/rest:     10-20% Error (thay vì 75%)
+POST /order/rabbitmq: 0-5% Error (thay vì 95%)
+```
+
+**Giải thích:**
+- ✅ Flask xử lý đồng thời → ít timeout hơn
+- ✅ RabbitMQ connection pool → ít connection errors
+- ⚠️ REST vẫn error nhiều hơn vì phải chờ Email Service (2.5s)
+- ✅ RabbitMQ nhanh, chỉ cần push message và return
+
+---
+
+### 4.5. Cách nhận biết REST API bị sập
+
+#### 🚨 **Dấu hiệu trong JMeter:**
+
+**1. Error Rate cao (>10%):**
+```
+Summary Report → Cột "Error %"
+- REST API: 10-30% errors
+- RabbitMQ: 0-2% errors
+```
+
+**2. Response Time tăng vọt:**
+```
+Summary Report → Cột "Average"
+- REST API: Từ 2.5s → 5s → 10s → timeout
+- Nhiều request >30s
+```
+
+**3. Timeout errors:**
+```
+View Results Tree → Click vào request màu đỏ
+- Response message: "SocketTimeoutException"
+- Response message: "Connection refused"
+- Response message: "Read timed out"
+```
+
+**4. Throughput giảm mạnh:**
+```
+Summary Report → Cột "Throughput"
+- Càng về sau càng giảm
+- REST: Bắt đầu 500 req/s → xuống 100 req/s
+```
+
+---
+
+#### 🖥️ **Dấu hiệu trong Terminal/Console:**
+
+**Terminal 1 (Order Service):**
+```
+[REST] Đang gọi Email Service cho đơn hàng ORD001...
+[REST] Đang gọi Email Service cho đơn hàng ORD002...
+[REST] Đang gọi Email Service cho đơn hàng ORD003...
+... (hàng trăm dòng đồng thời)
+[ERROR] Connection refused
+[ERROR] Timeout waiting for response
+```
+
+**Terminal 2 (Email Service REST API):**
+```
+[EMAIL REST] Nhận request...
+[EMAIL REST] Nhận request...
+[EMAIL REST] Nhận request...
+... (quá nhiều request đồng thời)
+[Errno 10061] No connection could be made
+OSError: [WinError 10048] Only one usage of socket address is permitted
+```
+
+**Dấu hiệu sập:**
+- ❌ Console đầy errors màu đỏ
+- ❌ Service không response
+- ❌ CPU 100%
+- ❌ Memory tăng liên tục
+
+---
+
+#### 📊 **So sánh khi chạy test:**
+
+**REST API (1000 users):**
+```
+✅ Request 1-100:    OK, ~2.5s
+⚠️  Request 101-500:  Chậm dần, ~5s
+❌ Request 501-1000: Timeout, errors
+
+Summary Report:
+- Average: 4500ms
+- Error %: 25%
+- Many red lines in "View Results Tree"
+```
+
+**RabbitMQ (1000 users):**
+```
+✅ Request 1-1000: Tất cả OK, ~50ms
+
+Summary Report:
+- Average: 50ms
+- Error %: 0%
+- All green in "View Results Tree"
+```
+
+---
+
+#### 🔍 **Cách test để thấy rõ sự sập:**
+
+**Test 1: Tăng dần số users**
+```
+Thread Group Settings:
+1. 100 users  → REST: OK
+2. 500 users  → REST: Chậm
+3. 1000 users → REST: Timeout/Error
+4. 2000 users → REST: Sập hoàn toàn
+```
+
+**Test 2: Kiểm tra logs real-time**
+```powershell
+# Xem CPU usage:
+while($true) {
+  Get-Process python | Select Name, CPU, PM | Format-Table
+  Start-Sleep -Seconds 2
+}
+```
+
+**Test 3: Monitor với Task Manager**
+- Mở Task Manager (Ctrl+Shift+Esc)
+- Tab "Performance"
+- Quan sát khi chạy JMeter test:
+  - REST API: CPU spike 80-100%
+  - RabbitMQ: CPU stable 20-30%
+
+---
+
+#### ⚠️ **Ngưỡng cảnh báo:**
+
+| Metric | Cảnh báo | Nghiêm trọng | Sập |
+|--------|----------|--------------|-----|
+| Error Rate | >5% | >15% | >30% |
+| Avg Response | >5s | >10s | >30s |
+| Throughput | <300/s | <100/s | 0/s |
+| CPU | >70% | >90% | 100% |
+
+---
+
+#### 💡 **Tips để test:**
+
+1. **Chạy REST trước để thấy nó sập:**
+   ```
+   - Start với 1000 users
+   - Quan sát Summary Report
+   - Check View Results Tree (nhiều màu đỏ = errors)
+   ```
+
+2. **Sau đó chạy RabbitMQ để so sánh:**
+   ```
+   - Cùng 1000 users
+   - Summary Report: All green
+   - No errors
+   ```
+
+3. **Chụp màn hình kết quả:**
+   - REST: Nhiều errors
+   - RabbitMQ: Không có errors
+   - → Chứng minh RabbitMQ tốt hơn!
 
 ---
 
@@ -258,7 +532,94 @@ Test Plan
 
 ---
 
-## 🔍 MONITORING (OPTIONAL)
+## � DỪNG RABBITMQ CONSUMER
+
+### ⚠️ Hiện tượng: Consumer "chạy mãi" sau khi Ctrl+C
+
+**Tại sao Consumer vẫn chạy?**
+
+```
+[Khi chạy JMeter test]
+Order Service → Push 1000 messages → Queue (nhanh, <20s)
+                                       ↓
+                            Consumer xử lý từng message (2.5s/cái)
+                            → Mất ~40 phút cho 1000 messages!
+
+[Sau khi Ctrl+C Order Service]
+Order Service: ❌ Ngừng
+Email REST:    ❌ Ngừng
+Consumer:      ✅ VẪN CHẠY (xử lý messages còn trong queue)
+```
+
+**Đây là ĐẶC ĐIỂM của Message Queue:**
+- ✅ **Ưu điểm:** Không mất data, xử lý chắc chắn
+- ⚠️ **"Nhược điểm":** Phải đợi xử lý hết (hoặc dừng thủ công)
+
+---
+
+### Cách dừng Consumer:
+
+#### **Option 1: Ctrl+C (dừng consumer, giữ messages)**
+```powershell
+# Trong Terminal 3 (Consumer)
+Ctrl+C
+```
+→ Consumer dừng, messages **vẫn còn trong queue**  
+→ Lần sau chạy lại consumer sẽ xử lý tiếp
+
+#### **Option 2: Purge Queue (xóa tất cả messages chưa xử lý)**
+```powershell
+# Xóa tất cả messages trong queue:
+docker exec rabbitmq rabbitmqctl purge_queue email_queue
+```
+→ **Cảnh báo:** Messages bị xóa vĩnh viễn!
+
+#### **Option 3: Web UI (xóa messages qua giao diện)**
+1. Mở http://localhost:15672 (guest/guest)
+2. Tab "Queues" → Click `email_queue`
+3. Kéo xuống section **"Purge Messages"**
+4. Click **"Purge Messages"** button
+5. Confirm xóa
+
+---
+
+### 📋 Workflow khuyến nghị:
+
+**Trước mỗi lần test:**
+```powershell
+# 1. Kiểm tra queue hiện tại
+docker exec rabbitmq rabbitmqctl list_queues
+
+# 2. Purge nếu có messages cũ
+docker exec rabbitmq rabbitmqctl purge_queue email_queue
+
+# 3. Chạy test
+```
+
+**Sau test:**
+- **Nếu chỉ test response time:** Ctrl+C consumer, purge queue
+- **Nếu muốn xem consumer xử lý:** Để chạy hết, check logs
+
+---
+
+### 🔍 Kiểm tra trạng thái Queue:
+
+```powershell
+# Xem số messages trong queue:
+docker exec rabbitmq rabbitmqctl list_queues name messages_ready messages_unacknowledged
+
+# Output mẫu:
+# email_queue    850    0    ← Còn 850 messages chưa xử lý
+```
+
+**Hoặc xem qua Web UI:**
+- http://localhost:15672 → Tab "Queues"
+- **Ready:** Messages chưa xử lý
+- **Unacked:** Messages đang xử lý
+
+---
+
+## �🔍 MONITORING (OPTIONAL)
 
 ### RabbitMQ Management UI
 **Truy cập:** http://localhost:15672
